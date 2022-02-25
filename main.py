@@ -309,14 +309,20 @@ def main():
                 print(f"\t\tNo sigmas given. Trying to fetching from {states_file}...")
             
                 # Read first header lines (starting with) and look for the sigmas
-                sigmas = opes.find_sigmas(states_file)
-                if not sigmas:
-                    sys.exit(f"\n\tERROR: Could not find sigmas in {states_file}.\n\tNow exitting!")
-                elif len(sigmas) != len(cvs):
-                    sys.exit(f"\n\tERROR: Number of sigmas ({len(sigmas)}) do not match number of cvs ({len(cvs)}).\nNow exitting!")
+                
+                if os.path.isfile(states_file):
+                    sigmas = opes.find_sigmas(states_file)
+
+                    if not sigmas:
+                        sys.exit(f"\n\tERROR: Could not find sigmas in {states_file}.\n\tNow exitting!")
+                    elif len(sigmas) != len(cvs):
+                        sys.exit(f"\n\tERROR: Number of sigmas ({len(sigmas)}) do not match number of cvs ({len(cvs)}).\nNow exitting!")
+                    else:
+                        print(f"\t\tfound sigmas: {', '.join(list(map(str, sigmas)))} for {' and '.join(cvs)} respectively", flush=True)
+                        sigmas_info = dict(zip(cvs, sigmas))
                 else:
-                    print(f"\t\tfound sigmas: {', '.join(list(map(str, sigmas)))} for {' and '.join(cvs)} respectively", flush=True)
-                    sigmas_info = dict(zip(cvs, sigmas))
+                    sys.exit(f"\n\tERROR: Could not find {states_file}.\n\tNow exitting!")
+
             else:
                 sigmas = sigmas_from_user
            
