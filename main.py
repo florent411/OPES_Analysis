@@ -369,11 +369,7 @@ def main():
                                 unitfactor,
                                 split_fes_at,
                                 fmt)        
-            # else:
-            #     sys.exit(f"ERROR: Problem with the fes dataframe.")
-    # else:
-    #     pass
-    # print(f"runtime: {(time.time() - start_time):.4f} seconds\n\n")
+    print(f"runtime: {(time.time() - start_time):.4f} seconds\n\n")
 
     # Plotting
     # start_time = time.time()
@@ -383,7 +379,6 @@ def main():
 
     # print(f"runtime: {(time.time() - start_time):.4f} seconds\n\n")
 
-
-
+# Run the program
 if __name__ == '__main__':
     main()
