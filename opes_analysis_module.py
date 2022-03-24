@@ -376,7 +376,7 @@ def fes_from_colvar(colvar, cvs, sigmas_info, grid_info, process_max, mintozero,
 
     return fes_all
 
-def calc_conv(fes_df, unitfactor, split_fes_at, fmt, calc_fes_from, write_output=True):
+def calc_conv(fes_df, unitfactor, split_fes_at, calc_fes_from, fmt, write_output=True):
     ''' Calculate different convergence metrics given a free energy landscape.'''
 
     time_list = fes_df['time'].unique()
