@@ -376,90 +376,70 @@ def fes_from_colvar(colvar, cvs, sigmas_info, grid_info, process_max, mintozero,
 
     return fes_all
 
-def calc_conv(calc_conv, fes_df, reference, unitfactor, split_fes_at, fmt, write_output=True):
+def calc_conv(fes_df, unitfactor, split_fes_at, fmt, calc_fes_from, write_output=True):
     ''' Calculate different convergence metrics given a free energy landscape.'''
 
     time_list = fes_df['time'].unique()
+
+    # Reference distribution (p or v1)
+    reference = fes_df[fes_df['time'] == fes_df['time'].unique()[-1]]
     
+    # cvs
     cvs = [ x for x in reference.columns.values.tolist() if x not in ['time', 'fes']]
+    print(f"\t\tcvs: {' and '.join(cvs)}")   
 
-    if len(cvs) > 1:
-        print(f"\t:NOTE: skipping all convergence calculations for {'-'.join(cvs)} combination.\n\tMore than 1D not yet supported.")
-        return 0
-    # elif len(cvs) == 2:
-    #     print(f"\t:NOTE: Skipping KLdiv and/or dA calculations for {'-'.join(cvs)} combination.\n\tMore than 1D not yet supported for these parameters.\n")
-    #     calc_conv = 'deltaFE'
-
-    print(f"\t\tcvs: {' and '.join(cvs)}")
-
-    KLdivs, dAs, deltaFEs = [], [], []
+    kldiv_values, jsdiv_values, dalonso_values, dfe_values = [], [], [], []
 
     for index, time in enumerate(time_list):
         print(f"\t\tWorking on state {(index + 1)} of {len(time_list)}\t| {((index + 1)*100.0)/len(time_list):.1f}%", end='\r')
 
-        # Extract the data for that particular state (with time time).
+        # Current distribution (q or v2)
         current = fes_df[fes_df['time'] == time]
-        # print(current)
 
-        for cv in cvs:
+        # Free energy estimates
+        ref_fe = reference['fes'].values
+        cur_fe = current['fes'].values
 
-            if calc_conv in ['KLdiv', 'dAlonso', 'all']:
+        # Corresponding probability distributions
+        ref = np.exp(-ref_fe / unitfactor)
+        cur = np.exp(-cur_fe / unitfactor)
 
-                cur_cv = current[cv].values
-                cur_fe = current['fes'].values
-                ref_cv = reference[cv].values
-                ref_fe = reference['fes'].values
+        # Normalized probability distributions
+        ref_norm = ref / np.sum(ref)
+        cur_norm = cur / np.sum(cur)
 
-                # interpolate 
-                cur_fe_interp = np.interp(ref_cv, cur_cv, cur_fe)
+        # To adjust for large arear where q = 0, a Bayesian smoothing function is employed. Here a "simulation" is performed of N ideal steps, using the FE from sampling.
+        # The new adjusted probability for each of the bins is then (1 + Pi * N) / (M + N), where M is the total number of bins.
+        # N is chosen to be big enough to turn 0 values into very small values, without risking python not being able to handle the values.
+        # This effect is similar as adding very small values to all gridpoints.
+        N, M = 1e9, len(ref_norm) 
+        ref_norm_smooth = (N * ref_norm + 1) / (N + M)
+        cur_norm_smooth = (N * cur_norm + 1) / (N + M)
+            
+        # Kullback-Leibler divergence
+        kldiv_values.append(tools.kldiv(ref_norm_smooth, cur_norm_smooth))
 
-                # calc. probabilities & norm. probabilities
-                cur = np.exp(-cur_fe_interp / unitfactor)
-                ref = np.exp(-ref_fe / unitfactor)
-                cur_norm = cur / np.sum(cur)
-                ref_norm = ref / np.sum(ref)
+        # Jensen–Shannon divergence
+        jsdiv_values.append(tools.jsdiv(ref_norm_smooth, cur_norm_smooth))
 
-                # Kullback-Leibler divergence
-                if calc_conv in ['KLdiv', 'all']:
-                    KLdiv = np.sum(ref_norm * np.log(ref_norm / cur_norm))
-                    KLdivs.append(KLdiv)
+        # Alonso & Echenique metric
+        dalonso_values.append(tools.dalonso(ref_norm_smooth, cur_norm_smooth))
 
-                    if calc_conv in ['KLdiv']:
-                        conv_list = KLdivs
+        # DeltaFE
+        # NB: summing is as accurate as trapz, and logaddexp avoids overflows
+        cv = cvs[0]
+        fesA = -unitfactor * np.logaddexp.reduce(-1/unitfactor * current[current[cv] < split_fes_at]['fes'].values)
+        fesB = -unitfactor * np.logaddexp.reduce(-1/unitfactor * current[current[cv] > split_fes_at]['fes'].values)
+        deltaFE = fesB - fesA
 
-                # Alonso & Echenique metric
-                if calc_conv in ['dAlonso', 'all']:
-                    cur_var = cur_fe_interp.var()
-                    ref_var = ref_fe.var()
-                    r = np.corrcoef(cur_fe_interp, ref_fe)[0,1]
-                    dA = np.sqrt((cur_var + ref_var) * (1 - r**2))
-                    dAs.append(dA)
-
-                    if calc_conv in ['dAlonso']:
-                        conv_list = dAs
-
-            # DeltaFE
-            if calc_conv in ['deltaFE', 'all']:
-                fesA = -unitfactor*np.logaddexp.reduce(-1/unitfactor * current[current[cv] < split_fes_at]['fes'].values)
-                fesB = -unitfactor*np.logaddexp.reduce(-1/unitfactor * current[current[cv] > split_fes_at]['fes'].values)
-                deltaFE = fesB - fesA
-                deltaFEs.append(deltaFE)
-
-                if calc_conv in ['deltaFE']:
-                    conv_list = deltaFEs
-    
+        dfe_values.append(deltaFE)
+        
     print(f"\t\tWorking on state {(index + 1)} of {len(time_list)}\t| {((index + 1)*100.0)/len(time_list):.1f}%")
 
-    # dictionary of lists
-    if calc_conv == 'all':
-        dict = {'time': time_list, 'KLdiv': KLdivs, 'dA': dAs, 'deltaFE': deltaFEs} 
-    else:
-        dict = {'time': time_list, calc_conv: conv_list}
+    # Dataframe from lists
+    conv_df = pd.DataFrame({'time': time_list, 'KLdiv': kldiv_values, 'JSdiv': jsdiv_values, 'dA': dalonso_values, 'deltaFE': dfe_values})
+    conv_df.to_csv(f"conv_{'_'.join(cvs)}_{calc_fes_from}.dat", index=False, sep='\t', float_format=fmt)
 
-    # Dataframe from dict
-    conv_df = pd.DataFrame(dict)
-    conv_df.to_csv(f"conv_param_{'_'.join(cvs)}.dat", index=False, sep='\t', float_format=fmt)
-
-    print(f"\t\t--> Outputfile: conv_param_{'_'.join(cvs)}.dat")           
+    print(f"\t\t--> Outputfile: conv_{'_'.join(cvs)}_{calc_fes_from}.dat")           
 
     return conv_df

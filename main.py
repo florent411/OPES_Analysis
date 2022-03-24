@@ -351,23 +351,17 @@ def main():
 
     # Calculating convergence
     start_time = time.time()
-    if calc_conv != 'no':
+    if calc_conv:
         print("Calculating convergence...")
 
-        if calc_conv == 'all':
-            print("\t:calculating deltaFE, KLdiv and dAlonso")
-        else:
-            print(f"\t:calculating {calc_conv}")
-
+        print("\t:calculating KLdiv, dAlonso and deltaFE")
+        
         for fes in fes_list:
-            reference = fes[fes['time'] == fes['time'].unique()[-1]]
-
             # Calculate the convergence parameters
-            convergence = opes.calc_conv(calc_conv,
-                                fes,
-                                reference,
+            convergence = opes.calc_conv(fes,
                                 unitfactor,
                                 split_fes_at,
+                                calc_fes_from,
                                 fmt)        
     print(f"runtime: {(time.time() - start_time):.4f} seconds\n\n")
 
