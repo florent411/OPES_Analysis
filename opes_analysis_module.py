@@ -4,6 +4,7 @@ import time
 import sys
 import numpy as np
 import pandas as pd
+from itertools import islice
 pd.options.mode.chained_assignment = None  # default='warn'
 from pprint import pprint
 from pathlib import Path
@@ -82,14 +83,21 @@ def find_sigmas(f):
     ''' See if you can find the sigma values in the first n lines of a file.'''
     sigmas_list = []
     with open(f) as fp:
-        lines = fp.readlines()
-        for index, line in enumerate(lines):
-            if not line.startswith('#!'):
+        while True:
+            # Read lines in chunks of 100. Otherwise with large STATES files, you get issues.
+            next_n_lines = list(islice(fp, 100))
+            if not next_n_lines:
                 break
-            elif 'sigma0' in line:
-                sigmas_list.append(float(line.split()[-1]))
-    
-    return sigmas_list
+            else:
+                for line in next_n_lines:
+                    if not line.startswith('#!'):
+                        break
+                    elif 'sigma0' in line:
+                        sigmas_list.append(float(line.split()[-1]))
+                
+                return sigmas_list
+            
+        return sigmas_list
 
 def fes_from_states(states_data, states_info, cvs, grid_info, process_max, mintozero, unitfactor, fes_prefix, fmt):
     ''' Calculate the free energy surface from the dumped state file (STATE_WFILE).'''
